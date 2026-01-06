@@ -1,120 +1,151 @@
 #!/usr/bin/env bash
-# RudyPlay V4 — Terminal YouTube & Local Music Player
-# Fully detached, live status, colors, auto-stop, playlist safe
 
-SOCKET="/tmp/rudyplay.sock"
-PIDFILE="/tmp/rudyplay.pid"
-SRCFILE="/tmp/rudyplay.source"
+USER_ID="$(id -u)"
+SOCKET="/tmp/rudyplay_${USER_ID}.sock"
+SRCFILE="/tmp/rudyplay_${USER_ID}.source"
 
 # Dependencies
-require() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency $1"; exit 1; }; }
-require mpv
-require yt-dlp
-require socat
+for cmd in mpv yt-dlp socat pgrep pkill; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+        echo "RudyPlay error: missing dependency $cmd"
+        exit 1
+    }
+done
 
 # Helpers
-is_youtube_url() { [[ "$1" =~ ^https?://(www\.)?(youtube\.com|youtu\.be)/ ]]; }
-mpv_cmd() { echo "$1" | socat - "$SOCKET" 2>/dev/null; }
-mpv_get() { mpv_cmd "{ \"command\": [\"get_property\", \"$1\"] }"; }
-json_value() { sed -n 's/.*"data":[ ]*\([^,}]*\).*/\1/p'; }
-format_time() { local t=${1%.*}; printf "%02d:%02d" $((t/60)) $((t%60)); }
-is_running() { [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+is_youtube_url() {
+    [[ "$1" =~ ^https?:// ]]
+}
+
+mpv_running() {
+    pgrep -u "$USER_ID" -x mpv >/dev/null
+}
+
+kill_all_mpv() {
+    pkill -u "$USER_ID" -x mpv 2>/dev/null
+}
+
+mpv_cmd() {
+    echo "$1" | socat - "$SOCKET" 2>/dev/null
+}
+
+mpv_get() {
+    mpv_cmd "{ \"command\": [\"get_property\", \"$1\"] }"
+}
+
+json_value() {
+    sed -n 's/.*"data":[ ]*\([^,}]*\).*/\1/p'
+}
+
+format_time() {
+    local t=${1%.*}
+    printf "%02d:%02d" $((t/60)) $((t%60))
+}
 
 wait_for_socket() {
-    local attempts=0
-    until [[ -S "$SOCKET" ]] || (( attempts>50 )); do
+    for _ in {1..50}; do
+        [[ -S "$SOCKET" ]] && return 0
         sleep 0.1
-        ((attempts++))
     done
-    [[ -S "$SOCKET" ]]
+    return 1
 }
 
-# Start playback
+# Commands
 start_player() {
-    rm -f "$SOCKET" "$PIDFILE" "$SRCFILE"
     local input="$1"
 
-    # Detect unquoted & in YouTube URL
-    if [[ "$input" == *"&"* && "$input" != \"*\" && "$input" != \'*\' ]]; then
-        echo -e "\e[31mRudyPlay error: URL contains & and must be quoted!\e[0m"
+    [[ -n "$input" ]] || {
+        echo "Usage: rudyplay start <url|file>"
         exit 1
-    fi
+    }
 
-    if [[ -f "$input" ]]; then
-        echo "Local" > "$SRCFILE"
-    elif is_youtube_url "$input"; then
-        echo "YouTube" > "$SRCFILE"
+    # HARD STOP anything already playing
+    kill_all_mpv
+    rm -f "$SOCKET"
+
+    # Validate
+    if [[ -f "$input" ]] || is_youtube_url "$input"; then
+        echo "$input" > "$SRCFILE"
     else
-        echo -e "\e[31mRudyPlay error: invalid input URL or file\e[0m"
+        echo "RudyPlay error: invalid URL or file"
         exit 1
     fi
 
-    # Launch mpv fully detached
-    setsid mpv --no-video --quiet --input-ipc-server="$SOCKET" --ytdl-format=bestaudio "$input" >/dev/null 2>&1 < /dev/null &
-    PID=$!
-    disown $PID
-    echo $PID > "$PIDFILE"
+    # Start mpv — fully detached, single instance
+    nohup mpv \
+        --no-video \
+        --no-terminal \
+        --really-quiet \
+        --input-ipc-server="$SOCKET" \
+        --ytdl-format=bestaudio \
+        "$input" \
+        >/dev/null 2>&1 &
 
-    # Wait for socket 3s
     if ! wait_for_socket; then
-        echo -e "\e[31mRudyPlay error: could not play the URL. Check if it exists or is blocked.\e[0m"
-        kill $PID 2>/dev/null
+        kill_all_mpv
+        rm -f "$SOCKET" "$SRCFILE"
+        echo "RudyPlay error: failed to start"
         exit 1
     fi
 
-    echo -e "\n\e[32m▶ RudyPlay — Playing\e[0m"
+    echo -e "\e[32m▶ RudyPlay — Playing\e[0m"
 }
 
-# Live status
-live_status() {
-    [[ -f "$PIDFILE" ]] || { echo -e "\e[31m■ Stopped\e[0m"; exit 0; }
-
-    while is_running; do
-        POS=$(mpv_get playback-time | json_value)
-        DUR=$(mpv_get duration | json_value)
-        SRC=$(cat "$SRCFILE" 2>/dev/null)
-
-        # Auto-stop if playback ended
-        if [[ -z "$POS" ]] || [[ -z "$DUR" ]]; then
-            rm -f "$SOCKET" "$PIDFILE" "$SRCFILE"
-            echo -e "\n\e[31m■ Stopped\e[0m"
-            exit 0
-        fi
-
-        echo -ne "\r\033[K\e[32m▶ RudyPlay\e[0m  Time: \e[33m$(format_time "${POS:-0}")\e[0m / \e[36m$(format_time "${DUR:-0}")\e[0m  Source: \e[35m$SRC\e[0m"
-        sleep 1
-    done
-
-    echo -e "\n\e[31m■ Stopped\e[0m"
-}
-
-# Command parser
-case "$1" in
-    start)
-        [[ -n "$2" ]] || { echo "Usage: rudyplay start \"<url|file>\""; exit 1; }
-        is_running && { echo -e "\e[33mAlready running\e[0m"; exit 1; }
-        start_player "$2"
-        ;;
-    pause)
-        is_running || { echo -e "\e[31mNot running\e[0m"; exit 1; }
-        mpv_cmd '{ "command": ["set_property","pause",true] }' >/dev/null 2>&1
-        echo -e "\e[33m⏸ Paused\e[0m"
-        ;;
-    resume)
-        is_running || { echo -e "\e[31mNot running\e[0m"; exit 1; }
-        mpv_cmd '{ "command": ["set_property","pause",false] }' >/dev/null 2>&1
-        echo -e "\e[32m▶ Playing\e[0m"
-        ;;
-    stop)
-        is_running && kill "$(cat "$PIDFILE")" 2>/dev/null
-        rm -f "$SOCKET" "$PIDFILE" "$SRCFILE"
+stop_player() {
+    if mpv_running; then
+        kill_all_mpv
+        rm -f "$SOCKET" "$SRCFILE"
         echo -e "\e[31m■ Stopped\e[0m"
-        ;;
-    status)
-        live_status
-        ;;
+    else
+        echo -e "\e[31mRudyPlay not running\e[0m"
+    fi
+}
+
+pause_player() {
+    mpv_running || { echo "RudyPlay not running"; exit 1; }
+    mpv_cmd '{ "command": ["set_property", "pause", true] }'
+    echo -e "\e[33m⏸ Paused\e[0m"
+}
+
+resume_player() {
+    mpv_running || { echo "RudyPlay not running"; exit 1; }
+    mpv_cmd '{ "command": ["set_property", "pause", false] }'
+    echo -e "\e[32m▶ Playing\e[0m"
+}
+
+status_player() {
+    if ! mpv_running; then
+        echo -e "\e[31m■ Stopped\e[0m"
+        return
+    fi
+
+    local pos dur src
+    src=$(cat "$SRCFILE" 2>/dev/null)
+    pos=$(mpv_get playback-time | json_value)
+    dur=$(mpv_get duration | json_value)
+
+    if [[ -z "$pos" || -z "$dur" ]]; then
+        echo -e "\e[31m■ Stopped\e[0m"
+        return
+    fi
+
+    echo -e "\e[32m▶ RudyPlay\e[0m  Time: \e[33m$(format_time "$pos")\e[0m / \e[36m$(format_time "$dur")\e[0m"
+    echo -e "Source: \e[35m$src\e[0m"
+}
+
+# Entry
+case "$1" in
+    start)  start_player "$2" ;;
+    stop)   stop_player ;;
+    pause)  pause_player ;;
+    resume) resume_player ;;
+    status) status_player ;;
     *)
-        echo "Commands: start | pause | resume | stop | status"
+        echo "Commands:"
+        echo "  rudyplay start <url|file>"
+        echo "  rudyplay pause"
+        echo "  rudyplay resume"
+        echo "  rudyplay stop"
+        echo "  rudyplay status"
         ;;
 esac
-
