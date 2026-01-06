@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow?style=flat-square)
 
-**RudyPlay** is a **lightweight terminal music player** that lets you play **YouTube videos and local audio files** directly in your terminal—no browser needed. Designed to be **fast, minimal, and fully terminal-friendly**, it integrates playback control, live status, and playlist support into a simple CLI tool.
+**RudyPlay** is a **lightweight terminal music player** that lets you play **YouTube videos and local audio files** directly in your terminal no browser needed. Designed to be **fast, minimal, and fully terminal friendly**, it integrates playback control, live status, and playlist support into a simple CLI tool.
 
 ---
 
@@ -15,7 +15,7 @@
 - ⌛ Live **playback status** with elapsed/total time, auto-refresh every second.  
 - 🛑 **Auto-stop** when the song or playlist finishes.  
 - 🚨 Handles invalid URLs gracefully with clear error messages.  
-- 💻 Fully **detached playback**—no `[1]+ Done` messages.  
+- 💻 Fully **detached playback** no `[1]+ Done` messages.  
 - 🌈 Color-coded output for better readability.  
 - 🖥 Works **anywhere** via `install.sh` and can be fully removed with `uninstall.sh`.  
 - ⚡ Ultra-lightweight and fast, using `mpv`, `yt-dlp`, and `socat`.  
@@ -81,11 +81,10 @@ License
 
 MIT License © 2026
 
-
 ---
 
 This is **ready to post to GitHub**, with badges, code blocks, and all instructions in Markdown.  
 
-If you want, I can also make a **more visually appealing version with emojis, headings, and screenshots** to make it pop in GitHub’s repo view — people will immediately understand it’s terminal-powered and lightweight.  
+If you want, I can also make a **more visually appealing version with emojis, headings, and screenshots** to make it pop in GitHub’s repo view  people will immediately understand it’s terminal-powered and lightweight.  
 
 Do you want me to do that next?
