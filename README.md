@@ -27,14 +27,14 @@
 Clone the repository and install globally:
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/RudySilver/RudyPlay.git
 cd RudyPlay
 chmod +x rudyplay install.sh uninstall.sh
 sudo bash install.sh
-
+```
 Now you can run rudyplay from anywhere in your terminal.
 Usage
-
+```
 # Start playback (YouTube URL or local file)
 rudyplay start "<url_or_file>"
 
@@ -50,28 +50,30 @@ rudyplay stop
 # Show live status
 rudyplay status
 
-    Tip: If your YouTube URL contains & (like playlists), quote it:
+```
+Tip: If your YouTube URL contains & (like playlists), quote it:
 
+
+```
 rudyplay start "https://www.youtube.com/watch?v=xyz&list=abc"
 
 Uninstall
-
+```
 Remove RudyPlay completely:
-
+```
 sudo bash uninstall.sh
-
+```
 Dependencies
 
-    mpv
-
+ mpv
     yt-dlp
-
     socat
 
 Install via your package manager (Debian/Parrot example):
-
+```
 sudo apt update && sudo apt install mpv yt-dlp socat -y
 
+```
 Why RudyPlay?
 
 RudyPlay is ideal for terminal enthusiasts, minimalists, and devs who want a lightweight, fully terminal-based music player. Fast, simple, and scriptable, perfect for automation or minimal systems.
